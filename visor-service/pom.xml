@@ -50,6 +50,10 @@
         </dependency>
         <dependency>
             <groupId>de.uniulm.omi.cloudiator</groupId>
+            <artifactId>visor-reporting-mc</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>de.uniulm.omi.cloudiator</groupId>
             <artifactId>visor-sensors</artifactId>
         </dependency>
     </dependencies>
