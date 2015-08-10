@@ -20,10 +20,11 @@ package de.uniulm.omi.cloudiator.visor.reporting.mc;
 
 import com.google.inject.Inject;
 import com.google.inject.name.Named;
-import de.uniulm.omi.cloudiator.visor.config.ConfigurationException;
 import de.uniulm.omi.cloudiator.visor.monitoring.Metric;
 import de.uniulm.omi.cloudiator.visor.reporting.ReportingException;
 import de.uniulm.omi.cloudiator.visor.reporting.ReportingInterface;
+import eu.paasage.camel.LayerType;
+import eu.paasage.camel.scalability.StatusType;
 import eu.paasage.executionware.metric_collector.CDOListener;
 import eu.paasage.executionware.metric_collector.MetricStorage;
 import eu.paasage.executionware.metric_collector.pubsub.PublicationServer;
@@ -31,12 +32,8 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.eclipse.emf.cdo.common.id.CDOID;
 
-import java.io.IOException;
-import java.net.MalformedURLException;
-import java.net.URISyntaxException;
 import java.util.Collection;
 import java.util.HashSet;
-import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -78,24 +75,38 @@ public class MetricCollector implements ReportingInterface<Metric> {
      * @throws de.uniulm.omi.cloudiator.visor.reporting.ReportingException If the CDO server could not be reached.
      */
     protected void sendMetric(MetricCollectorConversion con) throws ReportingException {
-        MetricCollectorCache.MeasurementParameters params = cache.getParameters(con.getMetricInstance());
+        if(!con.isEvent()){
+            MetricCollectorCache.MeasurementParameters params = cache.getMeasurementParameters(
+                con.getId());
 
-        if(!pubIds.contains(params.getMetricInstanceID())){
-            // destroy running threads:
-            tpe.shutdownNow();
-            //TODO just a workaround, better do not use shutdown before, so we could make tpe final:
-            tpe = new ThreadPoolExecutor(CORE_POOL_SIZE,MAX_POOL_SIZE,ALIVE_TIME, TimeUnit.SECONDS,new ArrayBlockingQueue<Runnable>(CORE_POOL_SIZE));
-            // add new id
-            pubIds.add(params.getMetricInstanceID());
-            // start again
-            tpe.execute(new CDOListener(pubServer, pubIds));
+            if(!pubIds.contains(params.getMetricInstanceID())){
+                // destroy running threads:
+                tpe.shutdownNow();
+                //TODO just a workaround, better do not use shutdown before, so we could make tpe final:
+                tpe = new ThreadPoolExecutor(CORE_POOL_SIZE,MAX_POOL_SIZE,ALIVE_TIME, TimeUnit.SECONDS,new ArrayBlockingQueue<Runnable>(CORE_POOL_SIZE));
+                // add new id
+                pubIds.add(params.getMetricInstanceID());
+                // start again
+                tpe.execute(new CDOListener(pubServer, pubIds));
+            }
+
+            LOGGER.debug("Send measurement to cdo.");
+            MetricStorage.storeMeasurement(con.getValue(), params.getMetricInstanceID(),
+                params.getExecContextInstanceID(), params.getMeasurementType(),
+                params.getMeasurementObject1(), params.getMeasurementObject2());
+        } else {
+            MetricCollectorCache.EventParameters params = cache.getEventParameters(con.getId());
+
+            LOGGER.debug("Send event to cdo.");
+
+            // Status
+            StatusType status = params.getStatus();
+            CDOID eventID = params.getEventID();
+            CDOID measID = params.getMeasID(); // TODO what if no measurement is linked to an event?
+            LayerType layer = params.getLayer(); // TODO calculate from most highest of all Metrics?!
+
+            MetricStorage.storeEvent(status, eventID, measID, layer);
         }
-
-        LOGGER.debug("Send measurement to cdo.");
-        MetricStorage.storeMeasurement(con.getValue(), params.getMetricInstanceID(),
-            params.getExecContextInstanceID(), params.getMeasurementType(),
-            params.getMeasurementObject1(), params.getMeasurementObject2());
-
     }
 
     /**

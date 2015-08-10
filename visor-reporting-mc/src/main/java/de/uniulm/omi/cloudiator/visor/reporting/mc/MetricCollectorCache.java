@@ -1,15 +1,14 @@
 package de.uniulm.omi.cloudiator.visor.reporting.mc;
 
-import de.uniulm.omi.cloudiator.visor.monitoring.Measurement;
-import eu.paasage.camel.Application;
 import eu.paasage.camel.CamelModel;
-import eu.paasage.camel.execution.ExecutionContext;
+import eu.paasage.camel.LayerType;
+import eu.paasage.camel.execution.Measurement;
 import eu.paasage.camel.metric.*;
+import eu.paasage.camel.scalability.*;
 import eu.paasage.executionware.metric_collector.MetricStorage;
 import eu.paasage.mddb.cdo.client.CDOClient;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.eclipse.emf.cdo.CDOObject;
 import org.eclipse.emf.cdo.common.id.CDOID;
 import org.eclipse.emf.cdo.view.CDOView;
 import org.eclipse.emf.common.util.EList;
@@ -30,7 +29,8 @@ public class MetricCollectorCache {
 
     private static MetricCollectorCache singleton;
 
-    private Map<String, MeasurementParameters> cache = new HashMap<String, MeasurementParameters>(); // <monitorinstance_id, params>
+    private Map<String, MeasurementParameters> cacheMetrics = new HashMap<String, MeasurementParameters>(); // <monitorinstance_id, params>
+    private Map<String, EventParameters> cacheEvents = new HashMap<String, EventParameters>(); // <monitorinstance_id, params>
     private final String modelName;
     private final CdoClientWrapper cdo;
 
@@ -46,8 +46,8 @@ public class MetricCollectorCache {
         return singleton;
     }
 
-    public MeasurementParameters getParameters(String id){
-        for(Map.Entry<String, MeasurementParameters> s : cache.entrySet()){
+    public MeasurementParameters getMeasurementParameters(String id){
+        for(Map.Entry<String, MeasurementParameters> s : cacheMetrics.entrySet()){
             if(s.getKey().equals(id)){
                 return s.getValue();
             }
@@ -63,12 +63,34 @@ public class MetricCollectorCache {
             cdo.getMeasurementObject(type, id), // CDOID measurementObject1,
             null //TODO not used currently: CDOID measurementObject2
         );
-        cache.put(id, params);
+        cacheMetrics.put(id, params);
+        return params;
+    }
+
+    public EventParameters getEventParameters(String id){
+        for(Map.Entry<String, EventParameters> s : cacheEvents.entrySet()){
+            if(s.getKey().equals(id)){
+                return s.getValue();
+            }
+        }
+
+        StatusType status = StatusType.SUCCESS; //TODO how to handle status?
+        CDOID eventID = cdo.getObjectOfEvent(id);
+        CDOID measID = cdo.getRandomMeasurementToOneOfTheMetrics(id); // TODO what if no measurement is linked to an event?
+        LayerType layer  = LayerType.IAA_S; // TODO calculate from most highest of all Metrics?!
+
+        EventParameters params = new EventParameters(
+            status,
+            eventID,
+            measID,
+            layer
+        );
+        cacheEvents.put(id, params);
         return params;
     }
 
     public void refresh(){
-        for(Map.Entry<String, MeasurementParameters> p : cache.entrySet()){
+        for(Map.Entry<String, MeasurementParameters> p : cacheMetrics.entrySet()){
             //TODO
         }
     }
@@ -91,6 +113,11 @@ public class MetricCollectorCache {
 
         public CDOID getObjectOfMetricInstance(String metricInstance){
             MetricInstance mi = this.getMetricInstance(metricInstance);
+            return (mi == null ? null : mi.cdoID());
+        }
+
+        public CDOID getObjectOfEvent(String eventName){
+            Event mi = this.getEvent(eventName);
             return (mi == null ? null : mi.cdoID());
         }
 
@@ -135,18 +162,95 @@ public class MetricCollectorCache {
             return null; //TODO other types?
         }
 
+        public CDOID getRandomMeasurementToOneOfTheMetrics(String name){
+            Event ev = this.getEvent(name);
+
+            if(ev instanceof FunctionalEvent){
+                FunctionalEvent se = (FunctionalEvent) ev;
+            } else if (ev instanceof NonFunctionalEvent){
+                NonFunctionalEvent se = (NonFunctionalEvent) ev;
+
+
+                return getRandomMeasurementToMetricContext(
+                    se.getMetricCondition().getMetricContext());
+
+            } else if (ev instanceof BinaryEventPattern){
+                BinaryEventPattern se = (BinaryEventPattern) ev;
+
+                //trace down till simple event
+                return getRandomMeasurementToOneOfTheMetrics(se.getLeftEvent().getName());
+            } else if (ev instanceof UnaryEventPattern){
+                UnaryEventPattern se = (UnaryEventPattern) ev;
+
+                //trace down till simple event
+                return getRandomMeasurementToOneOfTheMetrics(se.getEvent().getName());
+            }
+
+            //TODO exception handling
+            return null;
+        }
+
+        public CDOID getRandomMeasurementToMetricContext(MetricContext mc){
+            EList<EObject> objs = view.getResource(modelName).getContents();
+
+
+            for(EObject obj : objs) {
+                LOGGER.info("Search for metriccontext: " + mc.getName());
+
+                // Get Camel Model
+                CamelModel model = (CamelModel) obj;
+
+                for(MetricInstance mi : model.getMetricModels().get(0).getMetricInstances()){
+                    if(mi.getMetricContext().getName().equals(mc.getName())){
+                        for(Measurement m : model.getExecutionModels().get(0).getMeasurements()){
+                            if(m.getMetricInstance().getName().equals(mi.getName())){
+                                return mi.cdoID();
+                            }
+                        }
+                    }
+                }
+            }
+
+            return null; //TODO exception?
+        }
+
         //TODO cache result
         public MetricInstance getMetricInstance(String metricInstance){
             EList<EObject> objs = view.getResource(modelName).getContents();
             for(EObject obj : objs) {
                 LOGGER.info("The objs stored are: " + obj.toString());
 
-                // Get Couchbase Camel Model
+                // Get Camel Model
                 CamelModel model = (CamelModel) obj;
 
                 for(MetricInstance mi : model.getMetricModels().get(0).getMetricInstances()){
                     if(mi.getName().equals(metricInstance)){
                         return mi;
+                    }
+                }
+            }
+
+            return null; //TODO exception?
+        }
+
+        //TODO cache result
+        public Event getEvent(String name){
+            EList<EObject> objs = view.getResource(modelName).getContents();
+            for(EObject obj : objs) {
+                LOGGER.info("The objs stored are: " + obj.toString());
+
+                // Get Camel Model
+                CamelModel model = (CamelModel) obj;
+
+                for(Event ev : model.getScalabilityModels().get(0).getEvents()){
+                    if(ev.getName().equals(name)){
+                        return ev;
+                    }
+                }
+
+                for(EventPattern ev : model.getScalabilityModels().get(0).getPatterns()){
+                    if(ev.getName().equals(name)){
+                        return ev;
                     }
                 }
             }
@@ -194,6 +298,36 @@ public class MetricCollectorCache {
 
         public CDOID getMeasurementObject2() {
             return measurementObject2;
+        }
+    }
+
+    public class EventParameters {
+        private final StatusType status;
+        private final CDOID eventID;
+        private final CDOID measID;
+        private final LayerType layer;
+
+        public EventParameters(StatusType status, CDOID eventID, CDOID measID, LayerType layer) {
+            this.status = status;
+            this.eventID = eventID;
+            this.measID = measID;
+            this.layer = layer;
+        }
+
+        public StatusType getStatus() {
+            return status;
+        }
+
+        public CDOID getEventID() {
+            return eventID;
+        }
+
+        public CDOID getMeasID() {
+            return measID;
+        }
+
+        public LayerType getLayer() {
+            return layer;
         }
     }
 }
