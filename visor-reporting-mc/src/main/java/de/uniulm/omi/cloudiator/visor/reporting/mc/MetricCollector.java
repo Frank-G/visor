@@ -20,23 +20,18 @@ package de.uniulm.omi.cloudiator.visor.reporting.mc;
 
 import com.google.inject.Inject;
 import com.google.inject.name.Named;
+import de.uniulm.omi.cloudiator.paasage.*;
 import de.uniulm.omi.cloudiator.visor.monitoring.Metric;
 import de.uniulm.omi.cloudiator.visor.reporting.ReportingException;
 import de.uniulm.omi.cloudiator.visor.reporting.ReportingInterface;
-import eu.paasage.camel.LayerType;
-import eu.paasage.camel.scalability.StatusType;
-import eu.paasage.executionware.metric_collector.CDOListener;
-import eu.paasage.executionware.metric_collector.MetricStorage;
-import eu.paasage.executionware.metric_collector.pubsub.PublicationServer;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.eclipse.emf.cdo.common.id.CDOID;
 
+import java.rmi.NotBoundException;
+import java.rmi.RemoteException;
+import java.rmi.registry.LocateRegistry;
+import java.rmi.registry.Registry;
 import java.util.Collection;
-import java.util.HashSet;
-import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
@@ -47,25 +42,40 @@ import static com.google.common.base.Preconditions.checkNotNull;
  */
 public class MetricCollector implements ReportingInterface<Metric> {
 
-    private final PublicationServer pubServer;
-    private static final int CORE_POOL_SIZE = 10, MAX_POOL_SIZE = 20, ALIVE_TIME = 100;
-    private ThreadPoolExecutor tpe;
-    private final HashSet<CDOID> pubIds = new HashSet<>();
     private final MetricCollectorCache cache;
+    private final MetricQueue metricQueue;
 
     /**
      * A logger.
      */
     private static final Logger LOGGER = LogManager.getLogger(MetricCollector.class);
 
-    @Inject public MetricCollector(@Named("mcModelName") String modelName) {
+    @Inject public MetricCollector(@Named("mcResourceName") String resourceName, @Named("mcModelName") String modelName) {
         checkNotNull(modelName);
         checkArgument(!modelName.isEmpty(), "Model name must not be empty.");
-        this.tpe = new ThreadPoolExecutor(CORE_POOL_SIZE,MAX_POOL_SIZE,ALIVE_TIME, TimeUnit.SECONDS,new ArrayBlockingQueue<Runnable>(CORE_POOL_SIZE));
+        checkNotNull(resourceName);
+        checkArgument(!resourceName.isEmpty(), "Resource name must not be empty.");
         
         //TODO start metriccollector as singleton, static variable MetricCollectorRunnable
-        this.pubServer = new PublicationServer();
-        this.cache = MetricCollectorCache.create(modelName);
+        this.cache = MetricCollectorCache.create(resourceName, modelName);
+        this.metricQueue = initQueue();
+    }
+
+    private MetricQueue initQueue() {
+        MetricQueue mq = null;
+        try{
+            Registry reg = LocateRegistry.getRegistry(Constants.LOCALHOST_IP);
+            Object o = reg.lookup(Constants.QUEUE_REGISTRY_KEY);
+            mq = (MetricQueue) o;
+            return mq;
+        } catch (RemoteException rex){
+            LOGGER.error("Could not connect to remote object. (1)");
+        } catch (NotBoundException nbex){
+            LOGGER.error("Could not connect to remote object. (2)");
+        } catch (Exception ex){
+            LOGGER.error("Could not connect to remote object. (3)");
+        }
+        throw new IllegalStateException();
     }
 
     /**
@@ -76,36 +86,32 @@ public class MetricCollector implements ReportingInterface<Metric> {
      */
     protected void sendMetric(MetricCollectorConversion con) throws ReportingException {
         if(!con.isEvent()){
-            MetricCollectorCache.MeasurementParameters params = cache.getMeasurementParameters(
-                con.getId());
+            MeasurementParameter params = cache.getMeasurementParameter(con.getId());
 
-            if(!pubIds.contains(params.getMetricInstanceID())){
-                // destroy running threads:
-                tpe.shutdownNow();
-                //TODO just a workaround, better do not use shutdown before, so we could make tpe final:
-                tpe = new ThreadPoolExecutor(CORE_POOL_SIZE,MAX_POOL_SIZE,ALIVE_TIME, TimeUnit.SECONDS,new ArrayBlockingQueue<Runnable>(CORE_POOL_SIZE));
-                // add new id
-                pubIds.add(params.getMetricInstanceID());
-                // start again
-                tpe.execute(new CDOListener(pubServer, pubIds));
+
+            LOGGER.debug("Send measurement request to RMI server.");
+
+            if(this.metricQueue != null){
+                try{
+                    this.metricQueue.addMeasurement(new MeasurementParameter(con.getValue(), params));
+                } catch (RemoteException rex){
+                    rex.printStackTrace();
+                    LOGGER.error("could not call measurement method");
+                }
             }
-
-            LOGGER.debug("Send measurement to cdo.");
-            MetricStorage.storeMeasurement(con.getValue(), params.getMetricInstanceID(),
-                params.getExecContextInstanceID(), params.getMeasurementType(),
-                params.getMeasurementObject1(), params.getMeasurementObject2());
         } else {
-            MetricCollectorCache.EventParameters params = cache.getEventParameters(con.getId());
+            EventParameter params = cache.getEventParameter(con.getId());
 
-            LOGGER.debug("Send event to cdo.");
+            LOGGER.debug("Send event request to RMI server.");
 
-            // Status
-            StatusType status = params.getStatus();
-            CDOID eventID = params.getEventID();
-            CDOID measID = params.getMeasID(); // TODO what if no measurement is linked to an event?
-            LayerType layer = params.getLayer(); // TODO calculate from most highest of all Metrics?!
-
-            MetricStorage.storeEvent(status, eventID, measID, layer);
+            if(this.metricQueue != null){
+                try{
+                    this.metricQueue.addEvent(new EventParameter(con.getValue(), params));
+                } catch (RemoteException rex){
+                    rex.printStackTrace();
+                    LOGGER.error("could not call event method");
+                }
+            }
         }
     }
 

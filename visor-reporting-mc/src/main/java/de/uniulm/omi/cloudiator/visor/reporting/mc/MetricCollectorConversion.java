@@ -16,9 +16,9 @@ public class MetricCollectorConversion {
         if (split == -1) {
             throw new McMetricConversionException("No split char in: " + metric.getName());
         }
-        if(metric.getName().substring(0, split - 1).equals("cdo_metric")) {
+        if(metric.getName().substring(0, split).equals("cdo_metric")) {
             isEvent = false;
-        } else if (metric.getName().substring(0, split - 1).equals("cdo_event")){
+        } else if (metric.getName().substring(0, split).equals("cdo_event")){
             isEvent = true;
         } else {
             throw new McMetricConversionException("Wrong metric type: " + metric.getName().substring(split));
