@@ -47,6 +47,7 @@ public class BaseModule extends AbstractModule {
     @Override protected void configure() {
         install(new ConfigurationModule(configurationAccess, commandLinePropertiesAccessor));
         install(new IpModule());
+        install(new CdoModule()); // TODO added just because of lack of cli extensibility
         bind(ExecutionService.class).to(DefaultScheduledExecutionService.class);
         bind(new TypeLiteral<ReportingInterface<Metric>>() {
         }).annotatedWith(QueuedReporting.class).to(new TypeLiteral<Queue<Metric>>() {

@@ -56,6 +56,15 @@ import static com.google.common.base.Preconditions.checkState;
         options.addOption(
             OptionBuilder.withLongOpt("configFile").withDescription("Configuration file location.")
                 .isRequired().hasArg().create("conf"));
+
+        // TODO
+        // Added this here due to a lack of extensibility of CLI parameters in the modules:
+        options.addOption(
+            OptionBuilder.withLongOpt("mcResourceName").withDescription("Name of resource in CDO").hasArg()
+                .create("mcResourceName"));
+        options.addOption(
+            OptionBuilder.withLongOpt("mcModelName").withDescription("Name of model in CDO.")
+                .hasArg().create("mcModelName"));
     }
 
     public void printHelp() {
@@ -78,5 +87,13 @@ import static com.google.common.base.Preconditions.checkState;
 
     @Override @Nullable public String getPublicIp() {
         return getCommandLineOption("ip");
+    }
+
+    @Nullable @Override public String getModelName() {
+        return getCommandLineOption("mcModelName");
+    }
+
+    @Nullable @Override public String getResourceName() {
+        return getCommandLineOption("mcResourceName");
     }
 }
