@@ -52,25 +52,28 @@
     </repository>
   </repositories>
 
+    <!--
+    TODO does not work here, tested with JD
     <dependencyManagement>
         <dependencies>
             <dependency>
-                <groupId>org.ow2.paasage.executionware</groupId>
-                <artifactId>metric-collector</artifactId>
-                <version>${mc.version}</version>
+                <groupId>de.uniulm.omi.cloudiator.paasage</groupId>
+                <artifactId>cdostresser</artifactId>
+                <version>${cdo.stresser.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
+    -->
 
   <dependencies>
       <dependency>
           <groupId>de.uniulm.omi.cloudiator</groupId>
           <artifactId>visor-api</artifactId>
       </dependency>
-	  <dependency>
-			<groupId>org.ow2.paasage.executionware</groupId>
-			<artifactId>metric-collector</artifactId>
-	  </dependency>
+      <dependency>
+          <groupId>de.uniulm.omi.cloudiator.paasage</groupId>
+          <artifactId>cdostresser</artifactId>
+      </dependency>
   </dependencies>
 
 </project>
