@@ -42,7 +42,6 @@ import static com.google.common.base.Preconditions.checkNotNull;
  */
 public class MetricCollector implements ReportingInterface<Metric> {
 
-    private final MetricCollectorCache cache;
     private final MetricQueue metricQueue;
 
     /**
@@ -57,7 +56,6 @@ public class MetricCollector implements ReportingInterface<Metric> {
         checkArgument(!resourceName.isEmpty(), "Resource name must not be empty.");
         
         //TODO start metriccollector as singleton, static variable MetricCollectorRunnable
-        this.cache = MetricCollectorCache.create(resourceName, modelName);
         this.metricQueue = initQueue();
     }
 
@@ -86,27 +84,24 @@ public class MetricCollector implements ReportingInterface<Metric> {
      */
     protected void sendMetric(MetricCollectorConversion con) throws ReportingException {
         if(!con.isEvent()){
-            MeasurementParameter params = cache.getMeasurementParameter(con.getId());
-
 
             LOGGER.debug("Send measurement request to RMI server.");
 
             if(this.metricQueue != null){
                 try{
-                    this.metricQueue.addMeasurement(new MeasurementParameter(con.getValue(), params));
+                    this.metricQueue.addMeasurement(con.getId(), con.getValue());
                 } catch (RemoteException rex){
                     rex.printStackTrace();
                     LOGGER.error("could not call measurement method");
                 }
             }
         } else {
-            EventParameter params = cache.getEventParameter(con.getId());
 
             LOGGER.debug("Send event request to RMI server.");
 
             if(this.metricQueue != null){
                 try{
-                    this.metricQueue.addEvent(new EventParameter(con.getValue(), params));
+                    this.metricQueue.addEvent(con.getId(), con.getValue());
                 } catch (RemoteException rex){
                     rex.printStackTrace();
                     LOGGER.error("could not call event method");
