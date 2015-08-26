@@ -21,7 +21,7 @@ package de.uniulm.omi.cloudiator.visor.config;
 /**
  * Created by daniel on 10.02.15.
  */
-public interface CommandLinePropertiesAccessor extends IpProvider, McModelNameProvider, McResourceNameProvider {
+public interface CommandLinePropertiesAccessor extends IpProvider{
 
     public String getConfFileLocation();
 

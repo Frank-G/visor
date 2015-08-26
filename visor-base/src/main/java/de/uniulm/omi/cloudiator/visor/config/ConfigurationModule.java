@@ -42,11 +42,5 @@ public class ConfigurationModule extends AbstractModule {
             Multibinder.newSetBinder(binder(), IpProvider.class);
         ipProviderMultibinder.addBinding().toInstance(commandLinePropertiesAccessor);
         ipProviderMultibinder.addBinding().to(AwsIpWebService.class);
-        Multibinder<McModelNameProvider> modelNameMultibinder =
-            Multibinder.newSetBinder(binder(), McModelNameProvider.class);
-        modelNameMultibinder.addBinding().toInstance(commandLinePropertiesAccessor);
-        Multibinder<McResourceNameProvider> modelResourceMultibinder =
-            Multibinder.newSetBinder(binder(), McResourceNameProvider.class);
-        modelResourceMultibinder.addBinding().toInstance(commandLinePropertiesAccessor);
     }
 }
