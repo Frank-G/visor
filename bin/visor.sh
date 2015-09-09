@@ -3,4 +3,4 @@ java=java
 if test -n "$JAVA_HOME"; then
     java="$JAVA_HOME/bin/java"
 fi
-exec "$java" -jar ../lib/visor.jar "$@"
+exec "$java" -jar ../lib/visor-bridge.jar "$@"
