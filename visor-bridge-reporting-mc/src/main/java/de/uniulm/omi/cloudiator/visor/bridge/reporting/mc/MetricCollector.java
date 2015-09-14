@@ -50,11 +50,7 @@ public class MetricCollector implements ReportingInterface<Metric> {
      */
     private static final Logger LOGGER = LogManager.getLogger(MetricCollector.class);
 
-    @Inject public MetricCollector(@Named("mcResourceName") String resourceName, @Named("mcModelName") String modelName) {
-        checkNotNull(modelName);
-        checkArgument(!modelName.isEmpty(), "Model name must not be empty.");
-        checkNotNull(resourceName);
-        checkArgument(!resourceName.isEmpty(), "Resource name must not be empty.");
+    public MetricCollector() {
         
         //TODO start metriccollector as singleton, static variable MetricCollectorRunnable
         this.metricQueue = initQueue();
@@ -63,7 +59,7 @@ public class MetricCollector implements ReportingInterface<Metric> {
     private MetricQueue initQueue() {
         MetricQueue mq = null;
         try{
-            Registry reg = LocateRegistry.getRegistry(Constants.LOCALHOST_IP);
+            Registry reg = LocateRegistry.getRegistry(Constants.LOCALHOST_IP, Registry.REGISTRY_PORT + 10);
             Object o = reg.lookup(Constants.QUEUE_REGISTRY_KEY);
             mq = (MetricQueue) o;
             return mq;
